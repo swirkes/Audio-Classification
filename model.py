@@ -10,8 +10,23 @@ from keras.utils import to_categorical
 from sklearn.utils.class_weight import compute_class_weight
 from tqdm import tqdm
 from python_speech_features import mfcc
+import pickle
+from keras.callbacks import ModelCheckpoint
+from cfg import Config
+
+def check_data():
+    if os.path.isfile(config.p_path):
+        print('Loading existing data for {} model'.format(config.mode))
+        with open(config.p_path, 'rb') as handle:
+            tmp = pickle.load(handle)
+            return tmp
+    else:
+        return None
 
 def build_rand_feat():
+    tmp = check_data()
+    if tmp:
+        return tmp.data[0], tmp.data[1]
     X = []
     y = []
     _min, _max = float('inf'), -float('inf')
@@ -28,6 +43,8 @@ def build_rand_feat():
         _max = max(np.amax(X_sample), _max)
         X.append(X_sample if config.mode == 'conv' else X_sample.T)
         y.append(classes.index(label))
+    config.min = _min
+    config.max = _max
     X, y = np.array(X), np.array(y)
     X = (X - _min) / (_max - _min)
     if config.mode == 'conv':
@@ -35,8 +52,31 @@ def build_rand_feat():
     elif config.mode == 'time':
         X = X.reshape(X.shape[0], X.shape[1], X.shape[2])
     y = to_categorical(y, num_classes=10)
-    return X, y
+    config.data = (X, y)
     
+    with open(config.p_path, 'wb') as handle:
+        pickle.dump(config, handle, protocol=2)
+    
+    return X, y
+
+def get_recurrent_model():
+    #shape of data for RNN is (n, time, feat)
+    model = Sequential()
+    model.add(LSTM(128, return_sequences=True, input_shape=input_shape))
+    model.add(LSTM(128, return_sequences=True))
+    model.add(Dropout(0.5))
+    model.add(TimeDistributed(Dense(64, activation='relu')))
+    model.add(TimeDistributed(Dense(32, activation='relu')))
+    model.add(TimeDistributed(Dense(16, activation='relu')))
+    model.add(TimeDistributed(Dense(8, activation='relu')))
+    model.add(Flatten())
+    model.add(Dense(10, activation='softmax'))
+    model.summary()
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='adam',
+                  metrics=['acc'])
+    return model
+
 def get_conv_model():
     model = Sequential()
     model.add(Conv2D(16, (3, 3), activation='relu', strides=(1, 1),
@@ -60,14 +100,6 @@ def get_conv_model():
     return model
     
     
-class Config:
-    def __init__(self, mode='conv', nfilt=26, nfeat=13, nfft=512, rate=16000):
-        self.mode = mode
-        self.nfilt = nfilt
-        self.nfeat = nfeat
-        self.nfft = nfft
-        self.rate = rate
-        self.step = int(rate/10)
 
 df = pd.read_csv('instruments.csv')
 df.set_index('fname', inplace=True)
@@ -104,15 +136,20 @@ elif config.mode == 'time':
     X, y = build_rand_feat()
     y_flat = np.argmax(y, axis=1)
     input_shape = (X.shape[1], X.shape[2])
-   # model = get_recurrent_model()
+    model = get_recurrent_model()
     
 class_weight = compute_class_weight('balanced', 
                                     np.unique(y_flat),
                                     y_flat)
 
+checkpoint = ModelCheckpoint(config.model_path, monitor='val_acc', verbose=1, mode = 'max',
+                             save_best_only=True, save_weights_only=False, period=1)
+
 model.fit(X, y, epochs=10, batch_size=32,
-          shuffle=True,
-          class_weight=class_weight)
+          shuffle=True, validation_split=0.1,
+          callbacks=[checkpoint])
+
+model.save(config.model_path)
     
     
     

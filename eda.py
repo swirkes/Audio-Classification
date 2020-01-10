@@ -104,6 +104,8 @@ fft = {}
 fbank = {}
 mfccs = {}
 
+#This is a loop that...
+
 for c in classes: 
     wav_file = df[df.label == c].iloc[0,0]
     signal, rate = librosa.load('wavfiles/'+wav_file, sr=44100)
