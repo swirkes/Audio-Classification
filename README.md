@@ -1,5 +1,5 @@
 # Audio-Classification
-empty directory for audio classification videos
+Audio Classification using Convolutional Neural Network
 
 ### Setup a conda virtual environment (windows)
 
