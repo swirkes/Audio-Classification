@@ -1,5 +1,5 @@
 # Audio-Classification
-Audio Classification using Convolutional Neural Network
+Audio Classification using Convolutional Neural Network.
 
 ### Setup a conda virtual environment (windows)
 
